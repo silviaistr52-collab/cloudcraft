@@ -20,8 +20,49 @@ provider "aws" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+resource "aws_kms_key" "tfstate" {
+  description             = "KMS key for cloudcraft terraform state bucket"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable root account access"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow cloudcraft-role to use the key"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/cloudcraft-role"
+        }
+        Action = [
+          "kms:GenerateDataKey",
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_kms_alias" "tfstate" {
+  name          = "alias/cloudcraft-tfstate"
+  target_key_id = aws_kms_key.tfstate.key_id
+}
+
 resource "aws_s3_bucket" "tfstate" {
-  bucket = "cloudcraft-tfstate-738057517675"
+  bucket = "cloudcraft-tfstate-${data.aws_caller_identity.current.account_id}"
 }
 
 resource "aws_s3_bucket_versioning" "tfstate" {
@@ -37,8 +78,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.tfstate.arn
     }
+    bucket_key_enabled = true
   }
 }
 
@@ -58,5 +101,10 @@ resource "aws_dynamodb_table" "tfstate_lock" {
   attribute {
     name = "LockID"
     type = "S"
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.tfstate.arn
   }
 }
