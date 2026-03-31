@@ -31,7 +31,7 @@ resource "aws_kms_key" "tfstate" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "Enable root account access"
+        Sid    = "RootEmergencyAccess"
         Effect = "Allow"
         Principal = {
           AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
@@ -40,7 +40,7 @@ resource "aws_kms_key" "tfstate" {
         Resource = "*"
       },
       {
-        Sid    = "Allow cloudcraft-role to use the key"
+        Sid    = "CloudcraftRoleAccess"
         Effect = "Allow"
         Principal = {
           AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/cloudcraft-role"
@@ -120,11 +120,34 @@ resource "aws_kms_alias" "tfstate" {
   target_key_id = aws_kms_key.tfstate.key_id
 }
 
+# ─────────────────────────────────────────────
 # S3 access logging bucket
-# Separate bucket to receive access logs from
-# the state bucket — cannot use KMS per AWS docs
+# Receives access logs from the state bucket
+# Uses AES256 — KMS is not supported for S3
+# server access logging destination buckets
+# ─────────────────────────────────────────────
+#checkov:skip=CKV_AWS_144: Cross-region replication is overkill for a logging bucket
+#checkov:skip=CKV2_AWS_62: Event notifications not required for a logging bucket
 resource "aws_s3_bucket" "tfstate_logs" {
   bucket = "cloudcraft-tfstate-logs-${data.aws_caller_identity.current.account_id}"
+}
+
+resource "aws_s3_bucket_versioning" "tfstate_logs" {
+  bucket = aws_s3_bucket.tfstate_logs.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate_logs" {
+  bucket = aws_s3_bucket.tfstate_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "tfstate_logs" {
@@ -133,17 +156,6 @@ resource "aws_s3_bucket_public_access_block" "tfstate_logs" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate_logs" {
-  bucket = aws_s3_bucket.tfstate_logs.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      kms_master_key_id = aws_kms_key.tfstate.arn
-      sse_algorithm     = "aws:kms"
-    }
-  }
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "tfstate_logs" {
@@ -159,9 +171,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "tfstate_logs" {
   }
 }
 
-
-# State bucket
-
+#checkov:skip=CKV_AWS_144: Cross-region replication is overkill for a learning project state bucket
+#checkov:skip=CKV2_AWS_62: Event notifications not required for a state bucket
 resource "aws_s3_bucket" "tfstate" {
   bucket = "cloudcraft-tfstate-${data.aws_caller_identity.current.account_id}"
 }
@@ -200,8 +211,6 @@ resource "aws_s3_bucket_logging" "tfstate" {
   target_prefix = "tfstate-access-logs/"
 }
 
-# Expire non-current versions after 90 days
-# Keeps costs down while retaining recent history for rollbacks
 resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
   bucket = aws_s3_bucket.tfstate.id
 
@@ -214,10 +223,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
     }
   }
 }
-# checkov:skip=CKV2_AWS_62: S3 event notifications not required for a state bucket
-# checkov:skip=CKV_AWS_144: Cross-region replication is overkill for a learning project state bucket
+
 resource "aws_dynamodb_table" "tfstate_lock" {
-  name         = "cloudcraft-tfstate-lock-${data.aws_caller_identity.current.account_id}"
+  name         = "cloudcraft-tfstate-lock"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "LockID"
 
