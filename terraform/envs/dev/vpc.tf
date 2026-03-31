@@ -1,3 +1,4 @@
+
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
@@ -6,6 +7,13 @@ resource "aws_vpc" "main" {
   tags = {
     Name = "${local.name_prefix}-vpc"
   }
+}
+
+# Lock down the default security group — it exists
+# automatically on every VPC and allows all traffic
+# by default. We override it to deny everything.
+resource "aws_default_security_group" "main" {
+  vpc_id = aws_vpc.main.id
 }
 
 resource "aws_subnet" "public" {
@@ -40,11 +48,6 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
-
-# Route tables
-# Public subnet routes to internet via IGW
-# Private subnet has no route out — intentional
-
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -76,8 +79,10 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-# Public NACL — faces the internet
-# Allows HTTPS, HTTP and return traffic only
+
+# checkov:skip=CKV_AWS_231: Ephemeral ports 1024-65535 are required for TCP
+# return traffic. Port 3389 falls in this range but RDP is not in use.
+# Security groups provide the actual instance-level control.
 resource "aws_network_acl" "public" {
   vpc_id     = aws_vpc.main.id
   subnet_ids = [aws_subnet.public.id]
@@ -100,8 +105,6 @@ resource "aws_network_acl" "public" {
     to_port    = 80
   }
 
-  # Ephemeral ports — required for TCP return traffic
-  # Without this, responses to requests are silently dropped
   ingress {
     rule_no    = 120
     protocol   = "tcp"
@@ -125,9 +128,6 @@ resource "aws_network_acl" "public" {
   }
 }
 
-# Private NACL — internal only
-# Accepts traffic from within the VPC only
-# Nothing from the internet can reach this subnet directly
 resource "aws_network_acl" "private" {
   vpc_id     = aws_vpc.main.id
   subnet_ids = [aws_subnet.private.id]
@@ -154,13 +154,77 @@ resource "aws_network_acl" "private" {
     Name = "${local.name_prefix}-private-nacl"
   }
 }
+
 resource "aws_cloudwatch_log_group" "flow_logs" {
-  name              = "/${var.project}/${var.environment}/vpc-flow-logs"
-  retention_in_days = 30
+  name              = "/aws/vpc/${aws_vpc.main.id}/flow-logs"
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.cloudwatch.arn
 
   tags = {
     Name = "${local.name_prefix}-flow-logs"
   }
+}
+
+resource "aws_kms_key" "cloudwatch" {
+  description             = "KMS key for CloudWatch log groups"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RootEmergencyAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "CloudWatchLogsAccess"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${var.aws_region}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:CreateGrant"
+        ]
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "logs.${var.aws_region}.amazonaws.com"
+          }
+        }
+      },
+      {
+        Sid    = "CloudcraftRoleAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/cloudcraft-role"
+        }
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+          "kms:GenerateDataKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${local.name_prefix}-cloudwatch-kms"
+  }
+}
+
+resource "aws_kms_alias" "cloudwatch" {
+  name          = "alias/${local.name_prefix}-cloudwatch"
+  target_key_id = aws_kms_key.cloudwatch.key_id
 }
 
 resource "aws_iam_role" "flow_logs" {
@@ -169,11 +233,9 @@ resource "aws_iam_role" "flow_logs" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect = "Allow"
-      Principal = {
-        Service = "vpc-flow-logs.amazonaws.com"
-      }
-      Action = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "vpc-flow-logs.amazonaws.com" }
+      Action    = "sts:AssumeRole"
     }]
   })
 }
