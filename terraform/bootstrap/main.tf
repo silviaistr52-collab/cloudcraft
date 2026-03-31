@@ -213,7 +213,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
     }
   }
 }
-
 # checkov:skip=CKV2_AWS_62: S3 event notifications not required for a state bucket
 # checkov:skip=CKV_AWS_144: Cross-region replication is overkill for a learning project state bucket
 resource "aws_dynamodb_table" "tfstate_lock" {
