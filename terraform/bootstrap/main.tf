@@ -159,6 +159,15 @@ resource "aws_s3_bucket_lifecycle_configuration" "tfstate_logs" {
   bucket = aws_s3_bucket.tfstate_logs.id
 
   rule {
+    id     = "abort-incomplete-multipart-upload"
+    status = "Enabled"
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+
+  rule {
     id     = "expire-old-logs"
     status = "Enabled"
 
@@ -208,6 +217,15 @@ resource "aws_s3_bucket_logging" "tfstate" {
 
 resource "aws_s3_bucket_lifecycle_configuration" "tfstate" {
   bucket = aws_s3_bucket.tfstate.id
+
+    rule {
+    id     = "abort-incomplete-multipart-upload"
+    status = "Enabled"
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 
   rule {
     id     = "expire-old-versions"
