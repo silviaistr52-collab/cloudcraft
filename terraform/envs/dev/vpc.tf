@@ -78,7 +78,7 @@ resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private.id
   route_table_id = aws_route_table.private.id
 }
-# checkov:skip=CKV_AWS_231: Ephemeral ports 1024-65535 are required for TCP
+
 # return traffic. Port 3389 falls in this range but RDP is not in use.
 # Security groups provide the actual instance-level control.
 resource "aws_network_acl" "public" {

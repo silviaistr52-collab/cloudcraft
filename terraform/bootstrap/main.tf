@@ -120,14 +120,10 @@ resource "aws_kms_alias" "tfstate" {
   target_key_id = aws_kms_key.tfstate.key_id
 }
 
-# ─────────────────────────────────────────────
 # S3 access logging bucket
 # Receives access logs from the state bucket
 # Uses AES256 — KMS is not supported for S3
 # server access logging destination buckets
-# ─────────────────────────────────────────────
-#checkov:skip=CKV_AWS_144: Cross-region replication is overkill for a logging bucket
-#checkov:skip=CKV2_AWS_62: Event notifications not required for a logging bucket
 resource "aws_s3_bucket" "tfstate_logs" {
   bucket = "cloudcraft-tfstate-logs-${data.aws_caller_identity.current.account_id}"
 }
@@ -172,8 +168,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "tfstate_logs" {
   }
 }
 
-#checkov:skip=CKV_AWS_144: Cross-region replication is overkill for a learning project state bucket
-#checkov:skip=CKV2_AWS_62: Event notifications not required for a state bucket
 resource "aws_s3_bucket" "tfstate" {
   bucket = "cloudcraft-tfstate-${data.aws_caller_identity.current.account_id}"
 }

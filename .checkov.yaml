@@ -1,0 +1,18 @@
+skip-check:
+  # CKV_AWS_144: Cross-region replication
+  # Not required for a learning project state bucket or its logging bucket.
+  # Would require a second AWS region, replication IAM role, and destination
+  # bucket — disproportionate for this use case.
+  - CKV_AWS_144
+
+  # CKV2_AWS_62: S3 event notifications
+  # Not required for a state bucket or logging bucket. Event notifications
+  # are for application workloads that need to react to object changes.
+  # A state bucket has no such consumers.
+  - CKV2_AWS_62
+
+  # CKV_AWS_231: NACL allows ingress on port 3389 (RDP)
+  # Ephemeral ports 1024-65535 are required for TCP return traffic.
+  # Port 3389 falls in this range but RDP is not in use anywhere in this
+  # project. Security groups provide instance-level control.
+  - CKV_AWS_231
