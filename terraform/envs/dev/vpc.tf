@@ -153,16 +153,6 @@ resource "aws_network_acl" "private" {
   }
 }
 
-resource "aws_cloudwatch_log_group" "flow_logs" {
-  name              = "/aws/vpc/${aws_vpc.main.id}/flow-logs"
-  retention_in_days = 365
-  kms_key_id        = aws_kms_key.cloudwatch.arn
-
-  tags = {
-    Name = "${local.name_prefix}-flow-logs"
-  }
-}
-
 resource "aws_kms_key" "cloudwatch" {
   description             = "KMS key for CloudWatch log groups"
   deletion_window_in_days = 10
@@ -190,12 +180,14 @@ resource "aws_kms_key" "cloudwatch" {
           "kms:Encrypt",
           "kms:Decrypt",
           "kms:GenerateDataKey",
+          "kms:DescribeKey",
           "kms:CreateGrant"
         ]
         Resource = "*"
         Condition = {
           StringEquals = {
-            "kms:ViaService" = "logs.${var.aws_region}.amazonaws.com"
+            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
+            "kms:ViaService"    = "logs.${var.aws_region}.amazonaws.com"
           }
         }
       },
@@ -223,6 +215,16 @@ resource "aws_kms_key" "cloudwatch" {
 resource "aws_kms_alias" "cloudwatch" {
   name          = "alias/${local.name_prefix}-cloudwatch"
   target_key_id = aws_kms_key.cloudwatch.key_id
+}
+
+resource "aws_cloudwatch_log_group" "flow_logs" {
+  name              = "/aws/vpc/${aws_vpc.main.id}/flow-logs"
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.cloudwatch.arn
+
+  tags = {
+    Name = "${local.name_prefix}-flow-logs"
+  }
 }
 
 resource "aws_iam_role" "flow_logs" {
