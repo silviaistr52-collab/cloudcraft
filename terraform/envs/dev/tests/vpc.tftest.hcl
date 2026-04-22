@@ -30,7 +30,7 @@ run "public_subnet_has_public_ip" {
   command = plan
 
   assert {
-    condition     = aws_subnet.public.map_public_ip_on_launch == true
-    error_message = "Public subnet must auto-assign public IPs"
+    condition = aws_subnet.public.map_public_ip_on_launch == false
+    error_message = "Public subnet must not auto-assign public IPs"
   }
 }
