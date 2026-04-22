@@ -2,11 +2,11 @@ terraform {
   required_version = "~> 1.14"
 
   backend "s3" {
-    bucket         = "cloudcraft-tfstate-738057517675"
-    key            = "dev/terraform.tfstate"
-    region         = "eu-west-2"
-    encrypt        = true
-    kms_key_id     = "alias/cloudcraft-tfstate"
+    bucket       = "cloudcraft-tfstate-738057517675"
+    key          = "dev/terraform.tfstate"
+    region       = "eu-west-2"
+    encrypt      = true
+    kms_key_id   = "alias/cloudcraft-tfstate"
     use_lockfile = true
   }
 
