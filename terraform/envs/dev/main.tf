@@ -7,7 +7,7 @@ terraform {
     region         = "eu-west-2"
     encrypt        = true
     kms_key_id     = "alias/cloudcraft-tfstate"
-    dynamodb_table = "cloudcraft-tfstate-lock"
+    use_lockfile = true
   }
 
   required_providers {
