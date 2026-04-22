@@ -184,12 +184,6 @@ resource "aws_kms_key" "cloudwatch" {
           "kms:CreateGrant"
         ]
         Resource = "*"
-        Condition = {
-          StringEquals = {
-            "kms:CallerAccount" = data.aws_caller_identity.current.account_id
-            "kms:ViaService"    = "logs.${var.aws_region}.amazonaws.com"
-          }
-        }
       },
       {
         Sid    = "CloudcraftRoleAccess"
